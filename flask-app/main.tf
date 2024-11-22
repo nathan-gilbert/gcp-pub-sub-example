@@ -29,6 +29,8 @@ resource "google_compute_instance" "flask_instance" {
     apt-get update
     apt-get install -y python3-pip
     pip3 install flask google-cloud-pubsub
+    openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/CN=flask-app"
+
     cat <<EOF > /opt/app.py
     from flask import Flask, request
     from google.cloud import pubsub_v1
@@ -42,7 +44,7 @@ resource "google_compute_instance" "flask_instance" {
         return "Message received", 200
 
     if __name__ == "__main__":
-        app.run(host="0.0.0.0", port=8080)
+      app.run(host="0.0.0.0", port=8080, ssl_context=("cert.pem", "key.pem"))
     EOF
 
     # Create a systemd service for the Flask app
@@ -75,7 +77,7 @@ resource "google_pubsub_subscription" "flask_subscription" {
   topic = google_pubsub_topic.flask_topic.id
 
   push_config {
-    push_endpoint = "http://${google_compute_instance.flask_instance.network_interface.0.access_config.0.nat_ip}:8080/"
+    push_endpoint = "https://${google_compute_instance.flask_instance.network_interface.0.access_config.0.nat_ip}:8080/"
   }
 }
 
